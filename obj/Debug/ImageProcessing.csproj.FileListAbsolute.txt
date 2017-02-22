@@ -17,3 +17,22 @@ C:\Users\user\Documents\Visual Studio 2015\Projects\ImageProcessing\obj\Debug\Im
 C:\Users\user\Documents\Visual Studio 2015\Projects\ImageProcessing\obj\Debug\ImageProcessing.LinifyForm.resources
 C:\Users\user\Documents\Visual Studio 2015\Projects\ImageProcessing\obj\Debug\ImageProcessing.csprojResolveAssemblyReference.cache
 C:\Users\user\Documents\Visual Studio 2015\Projects\ImageProcessing\bin\Debug\ImageProcessing.exe.config
+C:\Users\user\Documents\Visual Studio 2015\Projects\ImageProcessing _backup\bin\Debug\ImageProcessing.exe.config
+C:\Users\user\Documents\Visual Studio 2015\Projects\ImageProcessing _backup\obj\Debug\ImageProcessing.exe
+C:\Users\user\Documents\Visual Studio 2015\Projects\ImageProcessing _backup\obj\Debug\ImageProcessing.pdb
+C:\Users\user\Documents\Visual Studio 2015\Projects\ImageProcessing _backup\bin\Debug\ImageProcessing.exe
+C:\Users\user\Documents\Visual Studio 2015\Projects\ImageProcessing _backup\bin\Debug\ImageProcessing.pdb
+C:\Users\user\Documents\Visual Studio 2015\Projects\ImageProcessing _backup\obj\Debug\ImageProcessing.csprojResolveAssemblyReference.cache
+C:\Users\user\Documents\Visual Studio 2015\Projects\ImageProcessing _backup\obj\Debug\ImageProcessing.BrightnessForm.resources
+C:\Users\user\Documents\Visual Studio 2015\Projects\ImageProcessing _backup\obj\Debug\ImageProcessing.ContrastForm.resources
+C:\Users\user\Documents\Visual Studio 2015\Projects\ImageProcessing _backup\obj\Debug\ImageProcessing.CropForm.resources
+C:\Users\user\Documents\Visual Studio 2015\Projects\ImageProcessing _backup\obj\Debug\ImageProcessing.GammaForm.resources
+C:\Users\user\Documents\Visual Studio 2015\Projects\ImageProcessing _backup\obj\Debug\ImageProcessing.ImageInfo.resources
+C:\Users\user\Documents\Visual Studio 2015\Projects\ImageProcessing _backup\obj\Debug\ImageProcessing.ImageProcessing.resources
+C:\Users\user\Documents\Visual Studio 2015\Projects\ImageProcessing _backup\obj\Debug\ImageProcessing.InsertImageForm.resources
+C:\Users\user\Documents\Visual Studio 2015\Projects\ImageProcessing _backup\obj\Debug\ImageProcessing.InsertShapeForm.resources
+C:\Users\user\Documents\Visual Studio 2015\Projects\ImageProcessing _backup\obj\Debug\ImageProcessing.InsertTextForm.resources
+C:\Users\user\Documents\Visual Studio 2015\Projects\ImageProcessing _backup\obj\Debug\ImageProcessing.LinifyForm.resources
+C:\Users\user\Documents\Visual Studio 2015\Projects\ImageProcessing _backup\obj\Debug\ImageProcessing.Properties.Resources.resources
+C:\Users\user\Documents\Visual Studio 2015\Projects\ImageProcessing _backup\obj\Debug\ImageProcessing.InsertTextForm1.resources
+C:\Users\user\Documents\Visual Studio 2015\Projects\ImageProcessing _backup\obj\Debug\ImageProcessing.csproj.GenerateResource.Cache

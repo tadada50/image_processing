@@ -378,7 +378,8 @@ namespace ImageProcessing
             if(lnFrm.ShowDialog() == DialogResult.OK)
             {
                 imageHandler.RestorePrevious();
-                imageHandler.Linify(lnFrm.HorizontalNodesCount, lnFrm.VerticalNodesCount, lnFrm.Thickness,lnFrm.StepCount,  this);
+                imageHandler.LinifyByPriority(lnFrm.HorizontalNodesCount, lnFrm.VerticalNodesCount, lnFrm.Thickness,lnFrm.StepCount,  this);
+            //    imageHandler.Linify(lnFrm.HorizontalNodesCount, lnFrm.VerticalNodesCount, lnFrm.Thickness, lnFrm.StepCount, this);
                 this.Invalidate();
             }
         }
