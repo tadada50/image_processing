@@ -588,6 +588,7 @@ namespace ImageProcessing
             Console.WriteLine("Total Rejected:" + reject);
 
         }
+
         public XYCoordinates DarkestPoint(byte[] rgbValues, int width, int height, int depth)
         {
             int low = 255;
@@ -599,6 +600,31 @@ namespace ImageProcessing
             for(int x = 0; x < width; x++)
             {
                 for(int y = 0; y < height; y++)
+                {
+                    c = GetPixel(rgbValues, depth, width, x, y);
+                    average = (c.R + c.G + c.B) / 3;
+                    if (average < low)
+                    {
+                        low = average;
+                        lx = x;
+                        ly = y;
+                    }
+                }
+
+            }
+            return new XYCoordinates(lx, ly);
+        }
+        public XYCoordinates DarkestPoint(byte[] rgbValues, int width, int height, int depth, XYCoordinates ROI1, XYCoordinates ROI2)
+        {
+            int low = 255;
+            int average;
+            int r, g, b;
+            int lx = 0;
+            int ly = 0;
+            Color c;
+            for (int x = 0; x < width; x++)
+            {
+                for (int y = 0; y < height; y++)
                 {
                     c = GetPixel(rgbValues, depth, width, x, y);
                     average = (c.R + c.G + c.B) / 3;
