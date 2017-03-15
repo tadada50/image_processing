@@ -7,21 +7,34 @@ using System.Collections;
 using System.IO;
 using System.Threading.Tasks;
 using System.Drawing.Imaging;
+using System.ComponentModel;
+using System.Windows.Threading;
 
 namespace ImageProcessing
 {
     public class ImageHandler
     {
+        static ImageProcessing mProcess;
         private string _bitmapPath;
         private Bitmap _currentBitmap;
         private Bitmap _bitmapbeforeProcessing;
         private Bitmap _bitmapPrevCropArea;
-
+        public static void setProcess(ImageProcessing process)
+        {
+            mProcess = process;
+        }
         public ImageHandler()
         {
-
         }
-
+        public class linenode
+        {
+            XYCoordinates entry { get; set; }
+            XYCoordinates exit { get; set; }
+            public linenode(XYCoordinates c1,XYCoordinates c2)
+            {
+                
+            }
+        }
         public Bitmap CurrentBitmap
         {
             get 
@@ -69,7 +82,12 @@ namespace ImageProcessing
                 System.IO.File.Delete(saveFilePath);
             _currentBitmap.Save(saveFilePath);
         }
-
+        public void SaveBitmap(Bitmap bmp, string saveFilePath)
+        {
+            if (System.IO.File.Exists(saveFilePath))
+                System.IO.File.Delete(saveFilePath);
+            bmp.Save(saveFilePath);
+        }
         public void ClearImage()
         {
             _currentBitmap = new Bitmap(1, 1);
@@ -461,6 +479,406 @@ namespace ImageProcessing
             }
             _currentBitmap = (Bitmap)bmap.Clone();
         }
+       // private readonly BackgroundWorker worker = new BackgroundWorker();
+        public void DispatchBackground(int horizontalNodesCount, int verticalNodesCount, int lineThickness, int stepCount, ImageProcessing process)
+        {
+            mProcess = process;
+            BackgroundWorker worker = new BackgroundWorker();
+            worker.DoWork += new DoWorkEventHandler(worker_DoWork);
+            worker.WorkerReportsProgress = true;
+            worker.ProgressChanged += OnProgressChanged;
+            worker.RunWorkerCompleted += new RunWorkerCompletedEventHandler(worker_RunWorkerCompleted);
+
+            object paramObj = horizontalNodesCount;
+            object paramObj2 = verticalNodesCount;
+            object paramObj3 = lineThickness;
+            object paramObj4 = stepCount;
+            object paramObj5 = process;
+
+            // The parameters you want to pass to the do work event of the background worker.
+            object[] parameters = new object[] { paramObj, paramObj2, paramObj3, paramObj4, paramObj5 };
+
+            // This runs the event on new background worker thread.
+            worker.RunWorkerAsync(parameters);
+
+        }
+        private void OnProgressChanged(object sender, ProgressChangedEventArgs e)
+        {
+            Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.Normal,
+            new Action(() => updateProgress(e)));
+            //   Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(test));
+            //  mProcess.UpdateStatus(e.ProgressPercentage+"%");
+            //  mProcess.Invalidate();
+
+        }
+        public void updateProgress(ProgressChangedEventArgs e)
+        {
+            mProcess.UpdateStatus(e.ProgressPercentage + "%");
+            mProcess.Invalidate();
+
+        }
+        private void worker_DoWork(object sender, DoWorkEventArgs e)
+        {
+            object[] parameters = e.Argument as object[];
+            LinifyByPriority3((int)parameters[0],(int)parameters[1],(int)parameters[2],(int)parameters[3],sender);
+            e.Result = "done!";
+        }
+
+        private void worker_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
+        {
+            //update ui once worker complete his work
+            mProcess.UpdateStatus("Done!");
+           // mProcess.Invalidate();
+        }
+        public void OptimizeSteps(List<Tuple<XYCoordinates, XYCoordinates>> stepslist)
+        {
+            //try to implement nearest neighbor algorithm
+            StreamWriter legible_steps_file =
+            new System.IO.StreamWriter(System.IO.Directory.GetCurrentDirectory() + @"\optimizedlegiblesteps.txt", false);
+            //get
+            List<Tuple<XYCoordinates, XYCoordinates>> optimizedList = new List<Tuple<XYCoordinates, XYCoordinates>>();
+            Tuple<XYCoordinates,XYCoordinates> initial = stepslist[0];
+            legible_steps_file.WriteLine(stepslist[0].Item1.legibleID + " to " + stepslist[0].Item2.legibleID + " : " + stepslist[0].Item1.x + "," + stepslist[0].Item1.y + " : " + stepslist[0].Item2.x + "," + stepslist[0].Item2.y);
+            stepslist.RemoveAt(0);
+            optimizedList.Add(initial);
+            XYCoordinates nodeExit = initial.Item2;
+            int nextStepIndex;
+            while (stepslist.Count > 0)
+            {
+                nextStepIndex = findNearest(nodeExit, stepslist);
+                if(getDistance(nodeExit,stepslist[nextStepIndex].Item1)< getDistance(nodeExit, stepslist[nextStepIndex].Item2))
+                {
+                    //destination -> item1    exit-> item2
+                    nodeExit = stepslist[nextStepIndex].Item2;
+                    legible_steps_file.WriteLine(stepslist[nextStepIndex].Item1.legibleID + " to " + stepslist[nextStepIndex].Item2.legibleID + " : " + stepslist[nextStepIndex].Item1.x + "," + stepslist[nextStepIndex].Item1.y + " : " + stepslist[nextStepIndex].Item2.x + "," + stepslist[nextStepIndex].Item2.y);
+                }
+                else
+                {
+                    //destination -> item2    exit-> item1
+                    nodeExit = stepslist[nextStepIndex].Item1;
+                    legible_steps_file.WriteLine(stepslist[nextStepIndex].Item2.legibleID + " to " + stepslist[nextStepIndex].Item1.legibleID + " : " + stepslist[nextStepIndex].Item2.x + "," + stepslist[nextStepIndex].Item2.y + " : " + stepslist[nextStepIndex].Item1.x + "," + stepslist[nextStepIndex].Item1.y);
+                }
+                optimizedList.Add(stepslist[nextStepIndex]);
+               // legible_steps_file.WriteLine(stepslist[nextStepIndex].Item1.legibleID + " to " + stepslist[nextStepIndex].Item2.legibleID + " : " + stepslist[nextStepIndex].Item1.x + "," + stepslist[nextStepIndex].Item1.y + " : " + stepslist[nextStepIndex].Item2.x + "," + stepslist[nextStepIndex].Item2.y);
+                stepslist.RemoveAt(nextStepIndex);
+            }
+            legible_steps_file.Flush();
+            legible_steps_file.Close();
+            Console.Out.WriteLine("Optimization Done");
+        }
+        public static int findNearest(XYCoordinates from, List<Tuple<XYCoordinates, XYCoordinates>> stepslist)
+        {
+            List<int> distances = new List<int>();
+            int minimaDistance = 99999;
+            int minimaIndex = -1;
+            XYCoordinates temp;
+            if (from.legibleID == 4073)
+            {
+                int u = 0;
+            }
+            for(int i = 0; i < stepslist.Count; i++)
+            {
+                int forewardDistance = getDistance(from, stepslist[i].Item1);
+                int backwardDistance = getDistance(from, stepslist[i].Item2);
+                if (forewardDistance< minimaDistance && forewardDistance < backwardDistance)
+                {
+                    minimaDistance = forewardDistance;
+                    minimaIndex = i;
+                }else if(backwardDistance < minimaDistance && forewardDistance > backwardDistance)
+                {
+                    minimaDistance = backwardDistance;
+                    minimaIndex = i;
+                }
+            }
+            return minimaIndex;
+        }
+        public static int getDistance(XYCoordinates c1, XYCoordinates c2)
+        {
+            //1000 -> left
+            //2000 -> top
+            //3000 -> right
+            //4000 -> bottom
+            if(c1.legibleID == 4073 && (c2.legibleID == 3025 || c2.legibleID == 1055))
+            {
+                int u=0;
+            }
+            int dy = 9999999;
+            int dx = 9999999;
+            if (c1.legibleID/1000 == 4)
+            {
+                //c1 is in the top edge
+                dy = c2.y;
+                if (c2.legibleID/1000 == 3)
+                {
+                    dx = c2.x - c1.x;
+                }
+                if(c2.legibleID/1000 == 1)
+                {
+                    dx = c1.x;
+                }
+                if(c2.legibleID/1000 == 4)
+                {
+                    //same side
+                    dy = 0;
+                    dx = Math.Abs(c1.x - c2.x);
+                }
+            }else if(c1.legibleID / 1000 == 3)
+            {
+                //c1 is in the right edge
+                dx = c1.x - c2.x;
+                if (c2.legibleID / 1000 == 4)
+                {
+                    dy = c1.y;
+                }
+                if (c2.legibleID / 1000 == 2)
+                {
+                    dy = c2.y - c1.y;
+                }
+                if (c2.legibleID / 1000 == 3)
+                {
+                    //same side
+                    dx = 0;
+                    dy = Math.Abs(c1.y - c2.y);
+                }
+            }
+            else if(c1.legibleID / 1000 == 2)
+            {
+                //c1 is in buttom edge
+                dy = c1.y - c2.y;
+                if (c2.legibleID / 1000 == 1)
+                {
+                    dx = c1.x;
+                }
+                if (c2.legibleID / 1000 == 3)
+                {
+                    dx = c2.x - c1.x;
+                }
+                if (c2.legibleID / 1000 == 2)
+                {
+                    //same side
+                    dy = 0;
+                    dx = Math.Abs(c1.x - c2.x);
+                }
+            }
+            else if(c1.legibleID / 1000 == 1)
+            {
+                //c1 is in the left edge
+                //c1 is in the right edge
+                dx = c2.x;
+                if (c2.legibleID / 1000 == 4)
+                {
+                    dy = c1.y;
+                }
+                if (c2.legibleID / 1000 == 2)
+                {
+                    dy = c2.y - c1.y;
+                }
+                if (c2.legibleID / 1000 == 1)
+                {
+                    //same side
+                    dx = 0;
+                    dy = Math.Abs(c1.y - c2.y);
+                }
+            }
+            else
+            {
+                //error
+            }
+            if (dy + dx < 0)
+            {
+                return -1;
+            }
+            return dy + dx;
+        }
+        public void LinifyByPriority3(int horizontalNodesCount, int verticalNodesCount, int lineThickness, int stepCount,object sender)
+        {
+            BackgroundWorker worker = (BackgroundWorker) sender;
+            Random rand = new Random();
+            int loop = stepCount;
+           // Bitmap sourceBitmap = (Bitmap)_currentBitmap.Clone();
+            Bitmap sourceBitmap = new Bitmap(_currentBitmap);
+            Bitmap targetBitmap = new Bitmap(sourceBitmap.Width, sourceBitmap.Height);
+            //   Bitmap targetBitmap = 
+            //calculate border nodes
+            double hInterval = (double)sourceBitmap.Width / (double)(horizontalNodesCount - 1);
+            double vInterval = (double)sourceBitmap.Height / (double)(verticalNodesCount - 1);
+            int xMin = 0;
+            int yMin = 0;
+            double xMax = hInterval * (horizontalNodesCount - 1);
+            double yMax = vInterval * (verticalNodesCount - 1);
+            List<XYCoordinates> borderNodes = new List<XYCoordinates>();
+            int targety;
+            int targetx;
+            int ycount = 0;
+            for (double y = 0; y < sourceBitmap.Height; y += vInterval, ycount++)
+            {
+                targety = Convert.ToInt32(y);
+                if (targety>=sourceBitmap.Height)
+                {
+                    targety--;
+                }
+                borderNodes.Add(new XYCoordinates(xMin, targety,1000+ycount));
+                borderNodes.Add(new XYCoordinates(Convert.ToInt32(xMax) - 1, targety,3000+ycount));
+            }
+            int xcount = 0;
+            for (double x = 0; x < sourceBitmap.Width; x += hInterval, xcount++)
+            {
+                targetx = Convert.ToInt32(x);
+                if (targetx >= sourceBitmap.Width)
+                {
+                    targetx--;
+                }
+                borderNodes.Add(new XYCoordinates(targetx, yMin,4000+xcount));
+                borderNodes.Add(new XYCoordinates(targetx, Convert.ToInt32(yMax) - 1,2000+xcount));
+            }
+
+            foreach (XYCoordinates c in borderNodes)
+            {
+                Console.Out.WriteLine(c.legibleID+": " +c.x + " " + c.y);
+            }
+            Console.Out.WriteLine(borderNodes.Count);
+
+            //get call n choose 2 pairs
+            List<Tuple<XYCoordinates, XYCoordinates>> coordinatePairs = new List<Tuple<XYCoordinates, XYCoordinates>>();
+            while (borderNodes.Count > 0)
+            {
+                XYCoordinates coordinate1 = borderNodes[0];
+                borderNodes.RemoveAt(0);
+                foreach (XYCoordinates c in borderNodes)
+                {
+                    if (coordinate1.x != c.x && coordinate1.y != c.y)
+                    {
+                        coordinatePairs.Add(Tuple.Create(coordinate1, c));
+                    }
+                }
+            }
+            StreamWriter file =
+            new System.IO.StreamWriter(System.IO.Directory.GetCurrentDirectory() + @"\pairs.txt", false);
+            foreach (Tuple<XYCoordinates, XYCoordinates> pair in coordinatePairs)
+            {
+                file.WriteLine(pair.Item1.x + "," + pair.Item1.y + " : " + pair.Item2.x + "," + pair.Item2.y);
+            }
+            file.WriteLine(coordinatePairs.Count);
+            file.Flush();
+            file.Close();
+            //   Bitmap bmpLinified = new Bitmap(temp.Width, temp.Height);
+           
+
+            StreamWriter steps_file =
+           new System.IO.StreamWriter(System.IO.Directory.GetCurrentDirectory() + @"\steps.txt", true);
+            StreamWriter legible_steps_file =
+            new System.IO.StreamWriter(System.IO.Directory.GetCurrentDirectory() + @"\legiblesteps.txt", true);
+            // traverse though each coodidate pair, get sum
+            int tempPairScore;
+            byte[] rgbValues;
+            byte[] rgbValues2;
+            int depth;
+            int width;
+            int scoreSum;
+            int candidateIndex = 0;
+            XYCoordinates darkestXY = new XYCoordinates(0, 0);
+            int reject = 0;
+            Task<int>[] taskArray;
+            DateTime t1 = DateTime.Now;
+            for (int l = 0; l < loop; l++)
+            {
+                Color beforedd = sourceBitmap.GetPixel(darkestXY.x, darkestXY.y);
+                candidateIndex = 0;
+                //  rgbValues = RgbValues(temp);
+                rgbValues = RgbValues2((Bitmap)sourceBitmap.Clone());
+                depth = System.Drawing.Bitmap.GetPixelFormatSize(sourceBitmap.PixelFormat);
+                width = targetBitmap.Width;
+
+                //find darkest point
+                darkestXY = DarkestPoint(rgbValues, targetBitmap.Width, targetBitmap.Height, depth);
+                scoreSum = PairScore(rgbValues, depth, width, coordinatePairs[0].Item1, coordinatePairs[0].Item2, darkestXY); // the lower the higher likely candidate (darker)
+
+                taskArray = new Task<int>[coordinatePairs.Count];
+                for (int i = 0; i < coordinatePairs.Count; i++)
+                {
+                    int index = i;
+                    taskArray[i] = Task<int>.Factory.StartNew(() => PairScore2(rgbValues, depth, width, coordinatePairs[index].Item1, coordinatePairs[index].Item2, darkestXY));
+                }
+                scoreSum = 255;
+                for (int i = 0; i < taskArray.Length; i++)
+                {
+                    try
+                    {
+                        taskArray[i].Wait();
+                        if (taskArray[i].Result < scoreSum)
+                        {
+                            candidateIndex = i;
+                            scoreSum = taskArray[i].Result;
+                        }
+                    }
+                    catch (AggregateException ae)
+                    {
+
+                        ae.Handle((x) =>
+                        {
+                            if (x is IndexOutOfRangeException) // This we know how to handle.
+                            {
+                                Console.WriteLine(x.Message);
+                                return true;
+                            }
+                            Console.WriteLine("WTF" + x.Message);
+                            return false; // Let anything else stop the application.
+                        });
+
+                    }
+
+
+                }
+
+                if (scoreSum >= 255)
+                {
+                    sourceBitmap.SetPixel(darkestXY.x, darkestXY.y, Color.White);
+                    l--;
+                    reject++;
+                    Console.WriteLine(darkestXY.x + " , " + darkestXY.y + " Total Rejected:" + reject);
+                }
+                else {
+                    steps_file.WriteLine(coordinatePairs[candidateIndex].Item1.x + "," + coordinatePairs[candidateIndex].Item1.y + " : " + coordinatePairs[candidateIndex].Item2.x + "," + coordinatePairs[candidateIndex].Item2.y);
+                    legible_steps_file.WriteLine(coordinatePairs[candidateIndex].Item1.legibleID+ " to "+ coordinatePairs[candidateIndex].Item2.legibleID+" : "+ coordinatePairs[candidateIndex].Item1.x + "," + coordinatePairs[candidateIndex].Item1.y + " : " + coordinatePairs[candidateIndex].Item2.x + "," + coordinatePairs[candidateIndex].Item2.y);
+                    Console.Out.WriteLine(coordinatePairs[candidateIndex].Item1.x + "," + coordinatePairs[candidateIndex].Item1.y + " : " + coordinatePairs[candidateIndex].Item2.x + "," + coordinatePairs[candidateIndex].Item2.y + " " + l + "/" + loop);
+                    
+                    // draw candidate, 
+                    Color black = new Color();
+                    black = Color.FromArgb(0, 0, 0);
+                    Color white = new Color();
+                    white = Color.FromArgb(255, 255, 255);
+                    line(targetBitmap, coordinatePairs[candidateIndex].Item1, coordinatePairs[candidateIndex].Item2, black);
+                    
+                    // subtract from original
+                    //    Color before = temp.GetPixel(darkestXY.x, darkestXY.y);
+                    //           Color before2 = GetPixel(rgbValues, depth, width, darkestXY.x, darkestXY.y);
+                    line(sourceBitmap, coordinatePairs[candidateIndex].Item1, coordinatePairs[candidateIndex].Item2, white);
+                    //                rgbValues = RgbValues2(temp);
+                    // Color after = temp.GetPixel(darkestXY.x, darkestXY.y);
+                    //            Color after2 = GetPixel(rgbValues, depth, width, darkestXY.x, darkestXY.y);
+                    coordinatePairs.RemoveAt(candidateIndex);
+                    //invalidate
+                    // process.Invalidate();
+                    worker.ReportProgress(l * 100 / loop);
+                    if (l % 10 == 0)
+                    {
+                        _currentBitmap = new Bitmap(targetBitmap);
+                    }
+                }
+            }//end if (int l=.....
+            steps_file.Flush();
+            steps_file.Close();
+            legible_steps_file.Flush();
+            legible_steps_file.Close();
+            Console.WriteLine("Total Rejected:" + reject);
+            DateTime t2 = DateTime.Now;
+            TimeSpan ts = t2.Subtract(t1);
+            Console.WriteLine("Time Elapsed = " + ts);
+            Console.WriteLine("Time per line = " + ts.TotalSeconds / loop);
+            SaveBitmap(sourceBitmap, System.IO.Directory.GetCurrentDirectory() + @"\temp.jpg");
+            _currentBitmap = targetBitmap;
+        }
+
         public void LinifyByPriority(int horizontalNodesCount, int verticalNodesCount, int lineThickness, int stepCount, ImageProcessing process)
         {
             Random rand = new Random();
@@ -565,6 +983,7 @@ namespace ImageProcessing
                 else {
                     steps_file.WriteLine(coordinatePairs[candidateIndex].Item1.x + "," + coordinatePairs[candidateIndex].Item1.y + " : " + coordinatePairs[candidateIndex].Item2.x + "," + coordinatePairs[candidateIndex].Item2.y);
                     Console.Out.WriteLine(coordinatePairs[candidateIndex].Item1.x + "," + coordinatePairs[candidateIndex].Item1.y + " : " + coordinatePairs[candidateIndex].Item2.x + "," + coordinatePairs[candidateIndex].Item2.y + " "+l+"/" + loop);
+                    process.UpdateStatus(coordinatePairs[candidateIndex].Item1.x + "," + coordinatePairs[candidateIndex].Item1.y + " : " + coordinatePairs[candidateIndex].Item2.x + "," + coordinatePairs[candidateIndex].Item2.y + " " + l + "/" + loop);
                     // draw candidate, 
                     Color black = new Color();
                     black = Color.FromArgb(0, 0, 0);
@@ -588,7 +1007,166 @@ namespace ImageProcessing
             Console.WriteLine("Total Rejected:" + reject);
 
         }
+        public void LinifyByPriority2(int horizontalNodesCount, int verticalNodesCount, int lineThickness, int stepCount, ImageProcessing process)
+        {
+           
+            Random rand = new Random();
+            int loop = stepCount;
+            Bitmap temp = (Bitmap)_currentBitmap;
+            //calculate border nodes
+            int hInterval = temp.Width / (horizontalNodesCount - 1);
+            int vInterval = temp.Height / (verticalNodesCount - 1);
+            int xMin = 0;
+            int yMin = 0;
+            int xMax = hInterval * (horizontalNodesCount - 1);
+            int yMax = vInterval * (verticalNodesCount - 1);
+            List<XYCoordinates> borderNodes = new List<XYCoordinates>();
 
+            for (int y = 0; y < temp.Height; y += vInterval)
+            {
+                borderNodes.Add(new XYCoordinates(xMin, y));
+                borderNodes.Add(new XYCoordinates(xMax, y));
+            }
+
+            for (int x = 0; x < temp.Width; x += hInterval)
+            {
+                borderNodes.Add(new XYCoordinates(x, yMin));
+                borderNodes.Add(new XYCoordinates(x, yMax));
+            }
+
+            foreach (XYCoordinates c in borderNodes)
+            {
+                Console.Out.WriteLine(c.x + " " + c.y);
+            }
+            Console.Out.WriteLine(borderNodes.Count);
+
+            //get call n choose 2 pairs
+            List<Tuple<XYCoordinates, XYCoordinates>> coordinatePairs = new List<Tuple<XYCoordinates, XYCoordinates>>();
+            while (borderNodes.Count > 0)
+            {
+                XYCoordinates coordinate1 = borderNodes[0];
+                borderNodes.RemoveAt(0);
+                foreach (XYCoordinates c in borderNodes)
+                {
+                    if (coordinate1.x != c.x && coordinate1.y != c.y)
+                    {
+                        coordinatePairs.Add(Tuple.Create(coordinate1, c));
+                    }
+                }
+            }
+            StreamWriter file =
+            new System.IO.StreamWriter(System.IO.Directory.GetCurrentDirectory() + @"\pairs.txt", false);
+            foreach (Tuple<XYCoordinates, XYCoordinates> pair in coordinatePairs)
+            {
+                file.WriteLine(pair.Item1.x + "," + pair.Item1.y + " : " + pair.Item2.x + "," + pair.Item2.y);
+            }
+            file.WriteLine(coordinatePairs.Count);
+            file.Flush();
+            file.Close();
+            //   Bitmap bmpLinified = new Bitmap(temp.Width, temp.Height);
+            _currentBitmap = new Bitmap(temp.Width, temp.Height);
+
+            StreamWriter steps_file =
+           new System.IO.StreamWriter(System.IO.Directory.GetCurrentDirectory() + @"\steps.txt", true);
+            // traverse though each coodidate pair, get sum
+            int tempPairScore;
+            byte[] rgbValues;
+            byte[] rgbValues2;
+            int depth;
+            int width;
+            int scoreSum;
+            int candidateIndex = 0;
+            XYCoordinates darkestXY = new XYCoordinates(0, 0);
+            int reject = 0;
+            Task<int>[] taskArray;
+            DateTime t1 = DateTime.Now;
+            for (int l = 0; l < loop; l++)
+            {
+                Color beforedd = temp.GetPixel(darkestXY.x, darkestXY.y);
+                candidateIndex = 0;
+                //  rgbValues = RgbValues(temp);
+                rgbValues = RgbValues2((Bitmap)temp.Clone());
+                depth = System.Drawing.Bitmap.GetPixelFormatSize(temp.PixelFormat);
+                width = _currentBitmap.Width;
+
+                //find darkest point
+                darkestXY = DarkestPoint(rgbValues, _currentBitmap.Width, _currentBitmap.Height, depth);
+                scoreSum = PairScore(rgbValues, depth, width, coordinatePairs[0].Item1, coordinatePairs[0].Item2, darkestXY); // the lower the higher likely candidate (darker)
+
+                taskArray = new Task < int >[coordinatePairs.Count];
+                for (int i = 0; i < coordinatePairs.Count; i++)
+                {
+                    int index =i;
+                    taskArray[i] = Task<int>.Factory.StartNew(() => PairScore2(rgbValues, depth, width, coordinatePairs[index].Item1, coordinatePairs[index].Item2, darkestXY));
+                }
+                scoreSum = 255;
+                for (int i = 0; i < taskArray.Length; i++)
+                {
+                    try
+                    {
+                        taskArray[i].Wait();
+                        if (taskArray[i].Result < scoreSum)
+                        {
+                            candidateIndex = i;
+                            scoreSum = taskArray[i].Result;
+                        }
+                    }
+                    catch (AggregateException ae)
+                    {
+
+                        ae.Handle((x) =>
+                        {
+                            if (x is IndexOutOfRangeException) // This we know how to handle.
+                            {
+                                Console.WriteLine(x.Message);
+                                return true;
+                            }
+                            Console.WriteLine("WTF"+ x.Message);
+                            return false; // Let anything else stop the application.
+                        });
+
+                    }
+
+                    
+                }
+                
+                if (scoreSum > 255)
+                {
+                    temp.SetPixel(darkestXY.x, darkestXY.y, Color.White);
+                    l--;
+                    reject++;
+                    Console.WriteLine(darkestXY.x + " , " + darkestXY.y + " Total Rejected:" + reject);
+                }
+                else {
+                    steps_file.WriteLine(coordinatePairs[candidateIndex].Item1.x + "," + coordinatePairs[candidateIndex].Item1.y + " : " + coordinatePairs[candidateIndex].Item2.x + "," + coordinatePairs[candidateIndex].Item2.y);
+                    Console.Out.WriteLine(coordinatePairs[candidateIndex].Item1.x + "," + coordinatePairs[candidateIndex].Item1.y + " : " + coordinatePairs[candidateIndex].Item2.x + "," + coordinatePairs[candidateIndex].Item2.y + " " + l + "/" + loop);
+                    // draw candidate, 
+                    Color black = new Color();
+                    black = Color.FromArgb(0, 0, 0);
+                    Color white = new Color();
+                    white = Color.FromArgb(255, 255, 255);
+                    line(_currentBitmap, coordinatePairs[candidateIndex].Item1, coordinatePairs[candidateIndex].Item2, black);
+                    // subtract from original
+                    //    Color before = temp.GetPixel(darkestXY.x, darkestXY.y);
+                    //           Color before2 = GetPixel(rgbValues, depth, width, darkestXY.x, darkestXY.y);
+                    line(temp, coordinatePairs[candidateIndex].Item1, coordinatePairs[candidateIndex].Item2, white);
+                    //                rgbValues = RgbValues2(temp);
+                    // Color after = temp.GetPixel(darkestXY.x, darkestXY.y);
+                    //            Color after2 = GetPixel(rgbValues, depth, width, darkestXY.x, darkestXY.y);
+                    coordinatePairs.RemoveAt(candidateIndex);
+                    //invalidate
+                    // process.Invalidate();
+                }
+            }//end if (int l=.....
+            steps_file.Flush();
+            steps_file.Close();
+            Console.WriteLine("Total Rejected:" + reject);
+            DateTime t2 = DateTime.Now;
+            TimeSpan ts = t2.Subtract(t1);
+            Console.WriteLine("Time Elapsed = " + ts);
+            Console.WriteLine("Time per line = " + ts.TotalSeconds/loop);
+            SaveBitmap(temp, System.IO.Directory.GetCurrentDirectory() + @"\temp.jpg");
+        }
         public XYCoordinates DarkestPoint(byte[] rgbValues, int width, int height, int depth)
         {
             int low = 255;
@@ -763,6 +1341,7 @@ namespace ImageProcessing
                 //    scoreList.Sort();
                 steps_file.WriteLine(coordinatePairs[candidateIndex].Item1.x + "," + coordinatePairs[candidateIndex].Item1.y + " : " + coordinatePairs[candidateIndex].Item2.x + "," + coordinatePairs[candidateIndex].Item2.y);
                 Console.Out.WriteLine(coordinatePairs[candidateIndex].Item1.x + "," + coordinatePairs[candidateIndex].Item1.y + " : " + coordinatePairs[candidateIndex].Item2.x + "," + coordinatePairs[candidateIndex].Item2.y);
+                process.UpdateStatus(coordinatePairs[candidateIndex].Item1.x + "," + coordinatePairs[candidateIndex].Item1.y + " : " + coordinatePairs[candidateIndex].Item2.x + "," + coordinatePairs[candidateIndex].Item2.y);
                 // draw candidate, 
                 Color black = new Color();
                 black = Color.FromArgb(0, 0, 0);
@@ -834,6 +1413,19 @@ namespace ImageProcessing
         {
             return lineSum(bmp, c1.x, c1.y, c2.x, c2.y);
         }
+        private static int PairScore2(byte[] rgbValues, int depth, int width, XYCoordinates c1, XYCoordinates c2, XYCoordinates darkestXY)
+        {
+            int result = 255;
+            try
+            {
+                result = lineSum2(rgbValues, depth, width, darkestXY, c1.x, c1.y, c2.x, c2.y);
+            }
+            catch (Exception e)
+            {
+                Console.Out.WriteLine(e.Message);
+            }
+            return result;
+        }
         public int PairScore(byte[] rgbValues,int depth,int width, XYCoordinates c1, XYCoordinates c2,XYCoordinates darkestXY)
         {
             int result = 255;
@@ -859,6 +1451,101 @@ namespace ImageProcessing
                 Console.Out.WriteLine(e.Message);
             }
             return result;
+        }
+        private static int lineSum2(byte[] rgbValues, int depth, int width, int x, int y, int x2, int y2)
+        {
+            Boolean ifPassThroughDarkest = false;
+            int count = 0;
+            int sum = 0;
+            int w = x2 - x;
+            int h = y2 - y;
+            int dx1 = 0, dy1 = 0, dx2 = 0, dy2 = 0;
+            if (w < 0) dx1 = -1; else if (w > 0) dx1 = 1;
+            if (h < 0) dy1 = -1; else if (h > 0) dy1 = 1;
+            if (w < 0) dx2 = -1; else if (w > 0) dx2 = 1;
+
+            int longest = Math.Abs(w);
+            int shortest = Math.Abs(h);
+            if (!(longest > shortest))
+            {
+                longest = Math.Abs(h);
+                shortest = Math.Abs(w);
+                if (h < 0) dy2 = -1; else if (h > 0) dy2 = 1;
+                dx2 = 0;
+            }
+            int numerator = longest >> 1;
+            for (int i = 0; i <= longest; i++)
+            {
+                //  putpixel(x, y, color);
+                Color c = GetPixel2(rgbValues, depth, width, x, y);
+                sum += (c.R + c.G + c.B) / 3;
+                numerator += shortest;
+                if (!(numerator < longest))
+                {
+                    numerator -= longest;
+                    x += dx1;
+                    y += dy1;
+                }
+                else {
+                    x += dx2;
+                    y += dy2;
+                }
+                count++;
+            }
+            return sum / count;
+        }
+        private static int lineSum2(byte[] rgbValues, int depth, int width, XYCoordinates darkestXY, int x, int y, int x2, int y2)
+        {
+            Boolean ifPassThroughDarkest = false;
+            int count = 0;
+            int sum = 0;
+            int w = x2 - x;
+            int h = y2 - y;
+            int dx1 = 0, dy1 = 0, dx2 = 0, dy2 = 0;
+            if (w < 0) dx1 = -1; else if (w > 0) dx1 = 1;
+            if (h < 0) dy1 = -1; else if (h > 0) dy1 = 1;
+            if (w < 0) dx2 = -1; else if (w > 0) dx2 = 1;
+
+            int longest = Math.Abs(w);
+            int shortest = Math.Abs(h);
+            if (!(longest > shortest))
+            {
+                longest = Math.Abs(h);
+                shortest = Math.Abs(w);
+                if (h < 0) dy2 = -1; else if (h > 0) dy2 = 1;
+                dx2 = 0;
+            }
+            int numerator = longest >> 1;
+            for (int i = 0; i <= longest; i++)
+            {
+                //  putpixel(x, y, color);
+                if (x == darkestXY.x && y == darkestXY.y)
+                {
+                    ifPassThroughDarkest = true;
+                }
+                Color c = GetPixel2(rgbValues, depth, width, x, y);
+                sum += (c.R + c.G + c.B) / 3;
+                numerator += shortest;
+                if (!(numerator < longest))
+                {
+                    numerator -= longest;
+                    x += dx1;
+                    y += dy1;
+                }
+                else {
+                    x += dx2;
+                    y += dy2;
+                }
+                count++;
+            }
+            if (ifPassThroughDarkest)
+            {
+                return sum / count;
+            }
+            else
+            {
+                return 256;
+            }
         }
         public int lineSum(byte[] rgbValues,int depth,int width, XYCoordinates darkestXY, int x, int y, int x2, int y2)
         {
@@ -1038,6 +1725,42 @@ namespace ImageProcessing
                 }
             }
          //   Console.Out.WriteLine("");
+        }
+        private static Color GetPixel2(byte[] rgbValues, int depth, int width, int x, int y)
+        {
+            Color clr = Color.Empty;
+
+            // Get color components count
+            int cCount = depth / 8;
+
+            // Get start index of the specified pixel
+            int i = ((y * width) + x) * cCount;
+
+            if (i > rgbValues.Length - cCount)
+                throw new IndexOutOfRangeException();
+
+            if (depth == 32) // For 32 bpp get Red, Green, Blue and Alpha
+            {
+                byte b = rgbValues[i];
+                byte g = rgbValues[i + 1];
+                byte r = rgbValues[i + 2];
+                byte a = rgbValues[i + 3]; // a
+                clr = Color.FromArgb(a, r, g, b);
+            }
+            if (depth == 24) // For 24 bpp get Red, Green and Blue
+            {
+                byte b = rgbValues[i];
+                byte g = rgbValues[i + 1];
+                byte r = rgbValues[i + 2];
+                clr = Color.FromArgb(r, g, b);
+            }
+            if (depth == 8)
+            // For 8 bpp get color value (Red, Green and Blue values are the same)
+            {
+                byte c = rgbValues[i];
+                clr = Color.FromArgb(c, c, c);
+            }
+            return clr;
         }
         public Color GetPixel(byte[] rgbValues, int depth,int width, int x, int y)
         {

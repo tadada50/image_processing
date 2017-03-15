@@ -15,6 +15,13 @@ namespace ImageProcessing
             this.y = y;
             this.instanceId = ++instanceCounter;
         }
+        public XYCoordinates(int x, int y, int legibleID)
+        {
+            this.x = x;
+            this.y = y;
+            this.legibleID = legibleID;
+            this.instanceId = ++instanceCounter;
+        }
 
         public int x { get; set; }
         public int y { get; set; }
@@ -22,6 +29,11 @@ namespace ImageProcessing
         public int UniqueId
         {
             get { return this.instanceId; }
+        }
+        public int legibleID
+        {
+            get;
+            set;
         }
 
     }

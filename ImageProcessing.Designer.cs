@@ -74,6 +74,8 @@ namespace ImageProcessing
             this.menuItemInsertImage = new System.Windows.Forms.MenuItem();
             this.menuItemInsertShape = new System.Windows.Forms.MenuItem();
             this.menuItem1 = new System.Windows.Forms.MenuItem();
+            this.StatusLabel = new System.Windows.Forms.Label();
+            this.OptimizeLinify = new System.Windows.Forms.MenuItem();
             this.SuspendLayout();
             // 
             // MainMenu1
@@ -85,7 +87,8 @@ namespace ImageProcessing
             this.menuItemColor,
             this.menuItemImage,
             this.menuItemInsert,
-            this.menuItem1});
+            this.menuItem1,
+            this.OptimizeLinify});
             // 
             // menuItemFile
             // 
@@ -391,16 +394,33 @@ namespace ImageProcessing
             this.menuItem1.Text = "Linify";
             this.menuItem1.Click += new System.EventHandler(this.menuItemLinify_Click);
             // 
+            // StatusLabel
+            // 
+            this.StatusLabel.AutoSize = true;
+            this.StatusLabel.Location = new System.Drawing.Point(693, 495);
+            this.StatusLabel.Name = "StatusLabel";
+            this.StatusLabel.Size = new System.Drawing.Size(41, 15);
+            this.StatusLabel.TabIndex = 0;
+            this.StatusLabel.Text = "label1";
+            // 
+            // OptimizeLinify
+            // 
+            this.OptimizeLinify.Index = 7;
+            this.OptimizeLinify.Text = "OptimizeLinify";
+            this.OptimizeLinify.Click += new System.EventHandler(this.OptimizeLinify_Click);
+            // 
             // ImageProcessing
             // 
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Inherit;
             this.BackColor = System.Drawing.SystemColors.AppWorkspace;
             this.ClientSize = new System.Drawing.Size(764, 509);
+            this.Controls.Add(this.StatusLabel);
             this.Menu = this.MainMenu1;
             this.Name = "ImageProcessing";
             this.Text = "Image Processing";
             this.Paint += new System.Windows.Forms.PaintEventHandler(this.ImageProcessing_Paint);
             this.ResumeLayout(false);
+            this.PerformLayout();
 
         }
 
@@ -452,6 +472,8 @@ namespace ImageProcessing
         private System.Windows.Forms.MenuItem menuItemInsertShape;
 
         private System.Windows.Forms.MenuItem menuItem1;
+        private System.Windows.Forms.Label StatusLabel;
+        private System.Windows.Forms.MenuItem OptimizeLinify;
     }
 }
 

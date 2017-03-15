@@ -11,6 +11,7 @@ namespace ImageProcessing
     public partial class ImageProcessing : Form
     {
         OpenFileDialog oDlg;
+        OpenFileDialog textDlg;
         SaveFileDialog sDlg;
         double zoomFactor = 1.0;
         private MenuItem cZoom;
@@ -25,6 +26,11 @@ namespace ImageProcessing
             oDlg.FilterIndex = 1;
             oDlg.Filter = "jpg Files (*.jpg)|*.jpg|gif Files (*.gif)|*.gif|png Files (*.png)|*.png |bmp Files (*.bmp)|*.bmp";
             /*************************/
+            textDlg = new OpenFileDialog();
+            textDlg.RestoreDirectory = true;
+            textDlg.Filter = "Text files (*.txt)|*.txt";
+
+            /*************************/
             sDlg = new SaveFileDialog(); // Save Dialog Initialization
             sDlg.RestoreDirectory = true;
             sDlg.InitialDirectory = "C:\\";
@@ -33,7 +39,10 @@ namespace ImageProcessing
             /*************************/
             cZoom = menuItemZoom100; // Current Zoom Percentage = 100%
         }
-
+        public void UpdateStatus(String status)
+        {
+            StatusLabel.Text = status;
+        }
         private void ImageProcessing_Paint(object sender, PaintEventArgs e)
         {
             Graphics g = e.Graphics;
@@ -375,13 +384,38 @@ namespace ImageProcessing
         private void menuItemLinify_Click(object sender, EventArgs e)
         {
             LinifyForm lnFrm = new LinifyForm();
-            if(lnFrm.ShowDialog() == DialogResult.OK)
+            if (lnFrm.ShowDialog() == DialogResult.OK)
             {
                 imageHandler.RestorePrevious();
-                imageHandler.LinifyByPriority(lnFrm.HorizontalNodesCount, lnFrm.VerticalNodesCount, lnFrm.Thickness,lnFrm.StepCount,  this);
-            //    imageHandler.Linify(lnFrm.HorizontalNodesCount, lnFrm.VerticalNodesCount, lnFrm.Thickness, lnFrm.StepCount, this);
+                imageHandler.DispatchBackground(lnFrm.HorizontalNodesCount, lnFrm.VerticalNodesCount, lnFrm.Thickness, lnFrm.StepCount, this);
+                //   imageHandler.LinifyByPriority2(lnFrm.HorizontalNodesCount, lnFrm.VerticalNodesCount, lnFrm.Thickness,lnFrm.StepCount,  this);
+                //    imageHandler.Linify(lnFrm.HorizontalNodesCount, lnFrm.VerticalNodesCount, lnFrm.Thickness, lnFrm.StepCount, this);
                 this.Invalidate();
             }
         }
+
+        private void OptimizeLinify_Click(object sender, EventArgs e)
+        {
+            if (DialogResult.OK == textDlg.ShowDialog())
+            {
+                //textDlg.FileName;
+                string[] lines = System.IO.File.ReadAllLines(textDlg.FileName);
+                List<Tuple<XYCoordinates, XYCoordinates>> steps = new List<Tuple<XYCoordinates, XYCoordinates>>();
+                foreach (string step in lines)
+                {
+                    steps.Add( getStepTuple(step));
+                }
+                imageHandler.OptimizeSteps(steps);
+            }
+        }
+        private Tuple<XYCoordinates, XYCoordinates> getStepTuple(string line){
+
+            char[] separatingChars = { ' ', ',', '.', ':', '\t' };
+            string[] words = line.Split(separatingChars, System.StringSplitOptions.RemoveEmptyEntries);
+            XYCoordinates from = new XYCoordinates(Int32.Parse(words[3]), Int32.Parse(words[4]), Int32.Parse(words[0]));
+            XYCoordinates to = new XYCoordinates(Int32.Parse(words[5]), Int32.Parse(words[6]), Int32.Parse(words[2]));
+            int i=0;
+            return new Tuple<XYCoordinates, XYCoordinates>(from, to);
+        } 
     }
 }
