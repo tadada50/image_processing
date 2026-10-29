@@ -30,6 +30,10 @@ button{margin:4px;font-size:16px;padding:8px 12px}.row{display:flex;flex-wrap:wr
 <label>clip <input type="range" id="clip" min="1" max="10" step="0.5" value="3" style="width:80px"></label><br>
 <label>Sharpen / edges <input type="range" id="sharp" min="0" max="3" step="0.1" value="0"></label><br>
 <label><input type="checkbox" id="inv"> Invert</label><br>
+<label>Soften darks <input type="range" id="soft" min="0" max="1" step="0.05" value="0"></label><br>
+<label><input type="checkbox" id="face"> <b>Emphasize face</b></label> <button id="focusbtn">🎯 Tap to set focus</button><br>
+<label>Focus size <input type="range" id="frad" min="0.1" max="0.8" step="0.01" value="0.32"></label><br>
+<label>Focus strength <input type="range" id="fstr" min="0" max="1" step="0.05" value="0.75"></label><br>
 <button id="reset">Reset</button> <button id="use"><b>Use for string art ↓</b></button>
 </div></div></fieldset>
 
@@ -61,18 +65,19 @@ async function removeBg(){if(cut||!file)return;$('bgstatus').textContent='loadin
  catch(err){console.error(err);$('bgstatus').textContent='background removal failed: '+err.message;$('bg').checked=false;}}
 $('bg').onchange=async()=>{if($('bg').checked)await removeBg();draw();};
 function resetView(){view.zoom=1;view.ox=0;view.oy=0;$('zoom').value=1;}
-$('reset').onclick=()=>{resetView();for(const[id,v]of[['bri',0],['con',0],['gam',1.2],['sharp',0],['clip',3]])$(id).value=v;$('eq').checked=$('inv').checked=false;draw();};
+$('reset').onclick=()=>{resetView();for(const[id,v]of[['bri',0],['con',0],['gam',1.2],['sharp',0],['clip',3],['soft',0],['frad',0.32],['fstr',0.75]])$(id).value=v;$('eq').checked=$('inv').checked=$('face').checked=false;focus.x=0.5;focus.y=0.42;draw();};
 let pending=false;function draw(){if(pending)return;pending=true;requestAnimationFrame(()=>{pending=false;render();});}
 function render(){S=+$('size').value;const c=$('prep');if(c.width!==S){c.width=c.height=S;}const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,S,S);
  const src=($('bg').checked&&cut)?cut:orig;if(!src)return;const w=src.width,h=src.height,base=S/Math.min(w,h),sc=base*view.zoom;
  x.drawImage(src,S/2+view.ox-w*sc/2,S/2+view.oy-h*sc/2,w*sc,h*sc);
- const id=x.getImageData(0,0,S,S);prepped=Prep.process(id.data,S,{brightness:+$('bri').value,contrast:+$('con').value,gamma:+$('gam').value,equalize:$('eq').checked,clip:+$('clip').value,sharpen:+$('sharp').value,invert:$('inv').checked});
- for(let i=0;i<S*S;i++){const v=prepped[i]*255;id.data[i*4]=id.data[i*4+1]=id.data[i*4+2]=v;id.data[i*4+3]=255;}x.putImageData(id,0,0);}
-for(const id of['bri','con','gam','eq','clip','sharp','inv','size'])$(id).addEventListener('input',draw);
+ const id=x.getImageData(0,0,S,S);prepped=Prep.process(id.data,S,{brightness:+$('bri').value,contrast:+$('con').value,gamma:+$('gam').value,equalize:$('eq').checked,clip:+$('clip').value,sharpen:+$('sharp').value,invert:$('inv').checked,softenDarks:+$('soft').value});
+ for(let i=0;i<S*S;i++){const v=prepped[i]*255;id.data[i*4]=id.data[i*4+1]=id.data[i*4+2]=v;id.data[i*4+3]=255;}x.putImageData(id,0,0);if($('face').checked){x.save();x.strokeStyle='rgba(255,0,0,.8)';x.lineWidth=2;x.setLineDash([6,4]);x.beginPath();x.arc(focus.x*S,focus.y*S,+$('frad').value*S,0,7);x.stroke();x.beginPath();x.arc(focus.x*S,focus.y*S,4,0,7);x.fillStyle='red';x.fill();x.restore();}}
+const focus={x:0.5,y:0.42};let picking=false;$('focusbtn').onclick=()=>{picking=true;$('face').checked=true;$('focusbtn').textContent='👆 tap the face…';draw();};
+for(const id of['bri','con','gam','eq','clip','sharp','inv','size','soft','face','frad','fstr'])$(id).addEventListener('input',draw);
 $('zoom').addEventListener('input',()=>{view.zoom=+$('zoom').value;draw();});
 // pan / pinch
 const pts=new Map();let lastDist=0;const cv=$('prep');const k=()=>cv.width/cv.clientWidth;
-cv.addEventListener('pointerdown',e=>{cv.setPointerCapture(e.pointerId);pts.set(e.pointerId,[e.clientX,e.clientY]);lastDist=0;});
+cv.addEventListener('pointerdown',e=>{if(picking){const b=cv.getBoundingClientRect();focus.x=(e.clientX-b.left)/b.width;focus.y=(e.clientY-b.top)/b.height;picking=false;$('focusbtn').textContent='🎯 Tap to set focus';draw();return;}cv.setPointerCapture(e.pointerId);pts.set(e.pointerId,[e.clientX,e.clientY]);lastDist=0;});
 cv.addEventListener('pointermove',e=>{if(!pts.has(e.pointerId))return;const p=pts.get(e.pointerId);
  if(pts.size===1){view.ox+=(e.clientX-p[0])*k();view.oy+=(e.clientY-p[1])*k();}
  pts.set(e.pointerId,[e.clientX,e.clientY]);
@@ -102,7 +107,7 @@ function start(){if(!orig)return alert('Upload an image first');render();if(work
  pins=Linify.pinsFor(N,S);steps=[];const x=clearOut();const w=lw(S);styleCtx(x,w);
  worker=new Worker('worker.js');worker.onmessage=e=>{const m=e.data;if(m.type==='progress'){for(const[a,b]of m.lines){x.beginPath();x.moveTo(...pins[a]);x.lineTo(...pins[b]);x.stroke();steps.push([a,b]);}$('status').textContent=' step '+steps.length+' / '+$('lines').value+' · thread ≈ '+threadM().toFixed(0)+' m';}
   else{$('status').textContent=' done: '+steps.length+' lines · thread ≈ '+threadM().toFixed(0)+' m';$('steps').value=txt();}};
- worker.postMessage({dark,size:S,opts:{pins:N,lines:+$('lines').value,alpha:Math.min(1,w),minSkip:+$('skip').value,autoStop:$('auto').checked}},[dark.buffer]);}
+ worker.postMessage({dark,size:S,opts:{pins:N,lines:+$('lines').value,alpha:Math.min(1,w),minSkip:+$('skip').value,autoStop:$('auto').checked,weight:$('face').checked?Linify.weightMap(S,focus.x,focus.y,+$('frad').value,1-(+$('fstr').value)):undefined}},[dark.buffer]);}
 $('go').onclick=start;$('use').onclick=()=>{start();$('out').scrollIntoView({behavior:'smooth'});};
 $('stop').onclick=()=>{if(worker){worker.terminate();worker=null;$('steps').value=txt();$('status').textContent=' stopped at '+steps.length;}};
 const txt=()=>`Pins numbered 0-${pins.length-1}, pin 0 at top, clockwise. Start at pin 0.\nFrame ${$('diam').value} cm, thread ${$('thr').value} mm, ${steps.length} lines, estimated thread length ${threadM().toFixed(1)} m (chords only, add slack for wrapping pins).\n`+steps.map((s,i)=>`Step ${i+1}: pin ${s[0]} -> pin ${s[1]}`).join('\n');

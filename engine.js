@@ -10,19 +10,21 @@ function lineSamples(p,q,size){const dx=q[0]-p[0],dy=q[1]-p[1],len=Math.hypot(dx
   const cells=[[x0,y0,(1-fx)*(1-fy)],[x0+1,y0,fx*(1-fy)],[x0,y0+1,(1-fx)*fy],[x0+1,y0+1,fx*fy]];
   for(const [cx,cy,w] of cells){if(w<=0||cx<0||cy<0||cx>=size||cy>=size)continue;const i=cy*size+cx;m.set(i,(m.get(i)||0)+w);}}
  const idx=new Int32Array(m.size),w=new Float32Array(m.size);let j=0,tw=0;for(const [i,v] of m){idx[j]=i;w[j]=Math.min(1,v);tw+=w[j];j++;}return {idx,w,tw};}
-// o: {pins, lines, alpha, minSkip, autoStop(bool, default true)}
+// o: {pins, lines, alpha, minSkip, autoStop(bool, default true), weight: optional Float32Array importance map (e.g. face emphasis)}
 function* run(target,size,o){const N=o.pins,P=pinsFor(N,size),cache=new Map(),skip=o.minSkip||0,a=Math.min(1,o.alpha),auto=o.autoStop!==false;
- const cov=new Float32Array(size*size);
- const get=(x,y)=>{const k=x<y?x*N+y:y*N+x;let s=cache.get(k);if(!s){s=lineSamples(P[x],P[y],size);cache.set(k,s);}return s;};
+ const cov=new Float32Array(size*size),W=o.weight;
+ const get=(x,y)=>{const k=x<y?x*N+y:y*N+x;let s=cache.get(k);if(!s){s=lineSamples(P[x],P[y],size);if(W){s.ww=new Float32Array(s.w.length);s.tw=0;for(let i=0;i<s.w.length;i++){s.ww[i]=s.w[i]*W[s.idx[i]];s.tw+=s.ww[i];}s.tw=Math.max(s.tw,1e-6);}else s.ww=s.w;cache.set(k,s);}return s;};
  let cur=0,last=-1;const used=new Set();
  for(let s=0;s<o.lines;s++){let best=-1,bs=-1e9;
   for(let j=0;j<N;j++){let d=Math.abs(j-cur);d=Math.min(d,N-d);if(d<=skip||j===last)continue;
    const k=cur<j?cur*N+j:j*N+cur;if(used.has(k))continue;const L=get(cur,j);let t=0;
-   for(let i=0;i<L.idx.length;i++){const q=L.idx[i];t+=(target[q]-cov[q])*L.w[i];}const sc=t/L.tw;if(sc>bs){bs=sc;best=j;}}
+   for(let i=0;i<L.idx.length;i++){const q=L.idx[i];t+=(target[q]-cov[q])*L.ww[i];}const sc=t/L.tw;if(sc>bs){bs=sc;best=j;}}
   if(best<0||(auto&&bs<=0))break;const L=get(cur,best);
   for(let i=0;i<L.idx.length;i++){const q=L.idx[i];cov[q]+=a*L.w[i]*(1-cov[q]);}
   used.add(cur<best?cur*N+best:best*N+cur);last=cur;cur=best;yield {step:s+1,from:last,to:cur,score:bs};}}
 // physical chord length for pins a,b on a circle of diameter D
+// importance map: 1 near focus (fx,fy in 0..1), gaussian falloff with radius r (fraction of size), down to floor
+function weightMap(size,fx,fy,r,floor){const W=new Float32Array(size*size),cx=fx*size,cy=fy*size,rr=r*size;for(let y=0;y<size;y++)for(let x=0;x<size;x++){const d=Math.hypot(x-cx,y-cy)/rr;W[y*size+x]=floor+(1-floor)*Math.exp(-d*d);}return W;}
 function chord(a,b,N,D){return D*Math.abs(Math.sin(Math.PI*(b-a)/N));}
-root.Linify={pinsFor,run,chord};
+root.Linify={pinsFor,run,chord,weightMap};
 })(typeof self!=='undefined'?self:globalThis);
