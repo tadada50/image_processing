@@ -1,0 +1,41 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Linify – Circular String Art</title>
+<style>body{font-family:sans-serif;margin:20px;background:#f4f4f4}label{display:inline-block;margin:4px 10px 4px 0}input[type=number]{width:80px}
+canvas{background:#fff;border:1px solid #ccc;margin:6px}#steps{width:100%;height:200px;font-family:monospace}button{margin:4px}</style></head><body>
+<h2>Linify – circular string art</h2>
+<p>Pins are numbered <b>0 to N-1</b>, pin 0 at the <b>top</b>, increasing <b>clockwise</b>. One continuous string.</p>
+<input type="file" id="file" accept="image/*"><br>
+<label>Pins <input type="number" id="pins" value="200"></label>
+<label>Lines <input type="number" id="lines" value="3000"></label>
+<label>Opacity/darkness per line (0-1) <input type="number" id="opacity" value="0.2" step="0.05"></label>
+<label>Render thickness px <input type="number" id="thick" value="1" step="0.5"></label>
+<label>Image size px <input type="number" id="size" value="500"></label>
+<label>Min pin skip <input type="number" id="skip" value="10"></label>
+<label><input type="checkbox" id="contrast" checked> Auto-contrast</label><br>
+<button id="go">Linify</button><button id="stop">Stop</button>
+<button id="png">Download PNG</button><button id="txt">Download TXT</button><button id="csv">Download CSV</button>
+<span id="status"></span><br>
+<canvas id="src"></canvas><canvas id="out"></canvas>
+<textarea id="steps" readonly></textarea>
+<script>
+const $=id=>document.getElementById(id);let img=null,worker=null,steps=[],pins=[],S=500;
+$('file').onchange=e=>{const f=e.target.files[0];if(!f)return;const i=new Image();i.onload=()=>{img=i;prep();};i.src=URL.createObjectURL(f);};
+function prep(){S=+$('size').value;const c=$('src');c.width=c.height=S;const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,S,S);
+ const m=Math.min(img.width,img.height);x.save();x.beginPath();x.arc(S/2,S/2,S/2,0,7);x.clip();x.drawImage(img,(img.width-m)/2,(img.height-m)/2,m,m,0,0,S,S);x.restore();
+ const d=x.getImageData(0,0,S,S).data,g=new Float32Array(S*S),c0=(S-1)/2;let lo=1,hi=0;
+ for(let i=0;i<S*S;i++){const v=(0.299*d[i*4]+0.587*d[i*4+1]+0.114*d[i*4+2])/255;g[i]=v;const px=i%S,py=(i/S|0);if(Math.hypot(px-c0,py-c0)<=c0){lo=Math.min(lo,v);hi=Math.max(hi,v);}}
+ const dark=new Float32Array(S*S);for(let i=0;i<S*S;i++){const px=i%S,py=(i/S|0);if(Math.hypot(px-c0,py-c0)>c0)continue;let v=g[i];if($('contrast').checked&&hi>lo)v=(v-lo)/(hi-lo);dark[i]=1-v;d[i*4]=d[i*4+1]=d[i*4+2]=v*255;}
+ x.putImageData(new ImageData(d,S,S),0,0);return dark;}
+function clearOut(){const c=$('out');c.width=c.height=S;const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,S,S);x.strokeStyle='#ccc';x.beginPath();x.arc(S/2,S/2,S/2-0.5,0,7);x.stroke();return x;}
+$('go').onclick=()=>{if(!img)return alert('Upload an image first');if(worker)worker.terminate();const dark=prep();const N=+$('pins').value;
+ pins=Linify.pinsFor(N,S);steps=[];const x=clearOut();x.strokeStyle='rgba(0,0,0,'+Math.min(1,+$('opacity').value*1.5)+')';x.lineWidth=+$('thick').value;
+ worker=new Worker('worker.js');worker.onmessage=e=>{const m=e.data;if(m.type==='progress'){x.beginPath();for(const [a,b] of m.lines){x.moveTo(...pins[a]);x.lineTo(...pins[b]);steps.push([a,b]);}x.stroke();$('status').textContent=' step '+steps.length+' / '+$('lines').value;}
+  else{$('status').textContent=' done: '+steps.length+' lines';$('steps').value=txt();}};
+ worker.postMessage({dark,size:S,opts:{pins:N,lines:+$('lines').value,opacity:+$('opacity').value,minSkip:+$('skip').value}},[dark.buffer]);};
+$('stop').onclick=()=>{if(worker){worker.terminate();worker=null;$('steps').value=txt();$('status').textContent=' stopped at '+steps.length;}};
+const txt=()=>`Pins numbered 0-${pins.length-1}, pin 0 at top, clockwise. Start at pin 0.\n`+steps.map((s,i)=>`Step ${i+1}: pin ${s[0]} -> pin ${s[1]}`).join('\n');
+const csv=()=>'step,from_pin,to_pin\n'+steps.map((s,i)=>`${i+1},${s[0]},${s[1]}`).join('\n');
+function dl(name,href){const a=document.createElement('a');a.download=name;a.href=href;a.click();}
+$('png').onclick=()=>dl('linify.png',$('out').toDataURL());
+$('txt').onclick=()=>dl('linify_steps.txt',URL.createObjectURL(new Blob([txt()])));
+$('csv').onclick=()=>dl('linify_steps.csv',URL.createObjectURL(new Blob([csv()])));
+</script><script src="engine.js"></script></body></html>
