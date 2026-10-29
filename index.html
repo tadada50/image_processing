@@ -18,7 +18,7 @@ button{margin:4px;font-size:16px;padding:8px 12px}.row{display:flex;flex-wrap:wr
 <label>Zoom <input type="range" id="zoom" min="0.3" max="5" step="0.01" value="1"></label><br>
 <label>Brightness <input type="range" id="bri" min="-0.5" max="0.5" step="0.01" value="0"></label><br>
 <label>Contrast <input type="range" id="con" min="-0.9" max="0.9" step="0.01" value="0"></label><br>
-<label>Gamma <input type="range" id="gam" min="0.3" max="3" step="0.01" value="1"></label><br>
+<label>Gamma <input type="range" id="gam" min="0.3" max="3" step="0.01" value="1.2"></label><br>
 <label><input type="checkbox" id="eq"> Equalize (contrast-limited)</label>
 <label>clip <input type="range" id="clip" min="1" max="10" step="0.5" value="3" style="width:80px"></label><br>
 <label>Sharpen / edges <input type="range" id="sharp" min="0" max="3" step="0.1" value="0"></label><br>
@@ -28,11 +28,13 @@ button{margin:4px;font-size:16px;padding:8px 12px}.row{display:flex;flex-wrap:wr
 
 <fieldset><legend><b>2. String art</b></legend>
 <label>Pins <input type="number" id="pins" value="200"></label>
-<label>Lines <input type="number" id="lines" value="3000"></label>
-<label>Darkness per line (0-1) <input type="number" id="opacity" value="0.2" step="0.05"></label>
-<label>Render thickness px <input type="number" id="thick" value="1" step="0.5"></label>
+<label>Max lines <input type="number" id="lines" value="3000"></label>
+<label><input type="checkbox" id="auto" checked> Auto-stop when no line helps</label>
+<label>Frame diameter (cm) <input type="number" id="diam" value="50" step="1"></label>
+<label>Thread thickness (mm) <input type="number" id="thr" value="0.25" step="0.05"></label>
+<label>Hi-res PNG px <input type="number" id="hires" value="2000" step="100"></label>
 <label>Image size px <input type="number" id="size" value="500"></label>
-<label>Min pin skip <input type="number" id="skip" value="10"></label><br>
+<label>Min pin skip <input type="number" id="skip" value="15"></label><br><small id="phys"></small><br>
 <button id="go">Linify</button><button id="stop">Stop</button>
 <button id="png">PNG</button><button id="txt">TXT</button><button id="csv">CSV</button>
 <span id="status"></span><br>
@@ -52,7 +54,7 @@ async function removeBg(){if(cut||!file)return;$('bgstatus').textContent='loadin
  catch(err){console.error(err);$('bgstatus').textContent='background removal failed: '+err.message;$('bg').checked=false;}}
 $('bg').onchange=async()=>{if($('bg').checked)await removeBg();draw();};
 function resetView(){view.zoom=1;view.ox=0;view.oy=0;$('zoom').value=1;}
-$('reset').onclick=()=>{resetView();for(const[id,v]of[['bri',0],['con',0],['gam',1],['sharp',0],['clip',3]])$(id).value=v;$('eq').checked=$('inv').checked=false;draw();};
+$('reset').onclick=()=>{resetView();for(const[id,v]of[['bri',0],['con',0],['gam',1.2],['sharp',0],['clip',3]])$(id).value=v;$('eq').checked=$('inv').checked=false;draw();};
 let pending=false;function draw(){if(pending)return;pending=true;requestAnimationFrame(()=>{pending=false;render();});}
 function render(){S=+$('size').value;const c=$('prep');if(c.width!==S){c.width=c.height=S;}const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,S,S);
  const src=($('bg').checked&&cut)?cut:orig;if(!src)return;const w=src.width,h=src.height,base=S/Math.min(w,h),sc=base*view.zoom;
@@ -75,16 +77,23 @@ function setZoom(z){view.zoom=Math.max(0.3,Math.min(5,z));$('zoom').value=view.z
 function clearOut(){const c=$('out');c.width=c.height=S;const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,S,S);x.strokeStyle='#ccc';x.beginPath();x.arc(S/2,S/2,S/2-0.5,0,7);x.stroke();return x;}
 function start(){if(!orig)return alert('Upload an image first');render();if(worker)worker.terminate();const c0=(S-1)/2,dark=new Float32Array(S*S);
  for(let i=0;i<S*S;i++)if(Math.hypot(i%S-c0,(i/S|0)-c0)<=c0)dark[i]=1-prepped[i];const N=+$('pins').value;
- pins=Linify.pinsFor(N,S);steps=[];const x=clearOut();x.strokeStyle='rgba(0,0,0,'+Math.min(1,+$('opacity').value*1.5)+')';x.lineWidth=+$('thick').value;
- worker=new Worker('worker.js');worker.onmessage=e=>{const m=e.data;if(m.type==='progress'){x.beginPath();for(const[a,b]of m.lines){x.moveTo(...pins[a]);x.lineTo(...pins[b]);steps.push([a,b]);}x.stroke();$('status').textContent=' step '+steps.length+' / '+$('lines').value;}
-  else{$('status').textContent=' done: '+steps.length+' lines';$('steps').value=txt();}};
- worker.postMessage({dark,size:S,opts:{pins:N,lines:+$('lines').value,opacity:+$('opacity').value,minSkip:+$('skip').value}},[dark.buffer]);}
+ pins=Linify.pinsFor(N,S);steps=[];const x=clearOut();const w=lw(S);styleCtx(x,w);
+ worker=new Worker('worker.js');worker.onmessage=e=>{const m=e.data;if(m.type==='progress'){for(const[a,b]of m.lines){x.beginPath();x.moveTo(...pins[a]);x.lineTo(...pins[b]);x.stroke();steps.push([a,b]);}$('status').textContent=' step '+steps.length+' / '+$('lines').value+' · thread ≈ '+threadM().toFixed(0)+' m';}
+  else{$('status').textContent=' done: '+steps.length+' lines · thread ≈ '+threadM().toFixed(0)+' m';$('steps').value=txt();}};
+ worker.postMessage({dark,size:S,opts:{pins:N,lines:+$('lines').value,alpha:Math.min(1,w),minSkip:+$('skip').value,autoStop:$('auto').checked}},[dark.buffer]);}
 $('go').onclick=start;$('use').onclick=()=>{start();$('out').scrollIntoView({behavior:'smooth'});};
 $('stop').onclick=()=>{if(worker){worker.terminate();worker=null;$('steps').value=txt();$('status').textContent=' stopped at '+steps.length;}};
-const txt=()=>`Pins numbered 0-${pins.length-1}, pin 0 at top, clockwise. Start at pin 0.\n`+steps.map((s,i)=>`Step ${i+1}: pin ${s[0]} -> pin ${s[1]}`).join('\n');
+const txt=()=>`Pins numbered 0-${pins.length-1}, pin 0 at top, clockwise. Start at pin 0.\nFrame ${$('diam').value} cm, thread ${$('thr').value} mm, ${steps.length} lines, estimated thread length ${threadM().toFixed(1)} m (chords only, add slack for wrapping pins).\n`+steps.map((s,i)=>`Step ${i+1}: pin ${s[0]} -> pin ${s[1]}`).join('\n');
 const csv=()=>'step,from_pin,to_pin\n'+steps.map((s,i)=>`${i+1},${s[0]},${s[1]}`).join('\n');
 function dl(name,href){const a=document.createElement('a');a.download=name;a.href=href;a.click();}
-$('png').onclick=()=>dl('linify.png',$('out').toDataURL());
+$('png').onclick=()=>{const R=+$('hires').value||S,c=document.createElement('canvas');c.width=c.height=R;const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,R,R);
+ const P=Linify.pinsFor(pins.length,R);styleCtx(x,lw(R));for(const[a,b]of steps){x.beginPath();x.moveTo(...P[a]);x.lineTo(...P[b]);x.stroke();}dl('linify.png',c.toDataURL());};
+// physical model: thread width in px = thread_mm / diameter_mm * px. Sub-pixel widths become alpha.
+function lw(px){return (+$('thr').value)/((+$('diam').value)*10)*px;}
+function styleCtx(x,w){x.lineWidth=Math.max(1,w);x.globalAlpha=Math.min(1,w);x.strokeStyle='#000';}
+function threadM(){const N=pins.length,D=(+$('diam').value)/100;return steps.reduce((s,[a,b])=>s+Linify.chord(a,b,N,D),0);}
+function showPhys(){const w=lw(+$('size').value);$('phys').textContent=`Thread = ${w.toFixed(3)} px at ${$('size').value} px → each line drawn at ${(Math.min(1,w)*100).toFixed(0)}% opacity, ${Math.max(1,w).toFixed(2)} px wide`;}
+for(const id of['diam','thr','size'])$(id).addEventListener('input',showPhys);showPhys();
 $('txt').onclick=()=>dl('linify_steps.txt',URL.createObjectURL(new Blob([txt()],{type:'text/plain'})));
 $('csv').onclick=()=>dl('linify_steps.csv',URL.createObjectURL(new Blob([csv()],{type:'text/csv'})));
 </script></body></html>
